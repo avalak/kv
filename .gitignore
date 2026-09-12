@@ -1,0 +1,5 @@
+# .gitignore
+*.out
+cover.out
+go.work
+go.work.sum

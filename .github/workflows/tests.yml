@@ -1,0 +1,62 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+
+# Read-only token; the workflow does not push anything back.
+permissions:
+  contents: read
+
+# Cancel in-flight runs when a new commit lands on the same ref.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Verify module
+        run: go mod verify
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # -race: catch data races
+      # -shuffle=on: randomize test order to expose inter-test dependencies
+      # -count=1: bypass the test cache so shuffle actually runs
+      - name: Test with race detector
+        run: go test -race -shuffle=on -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 7
