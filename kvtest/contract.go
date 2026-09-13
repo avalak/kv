@@ -135,6 +135,59 @@ func Contract[K comparable, V any](
 		}
 	})
 
+	t.Run("HasMissing", func(t *testing.T) {
+		b := newBackend(t)
+		ok, err := b.Has(ctx, keys.Missing)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			t.Fatal("Has on missing key must return false")
+		}
+	})
+
+	t.Run("HasAfterSave", func(t *testing.T) {
+		b := newBackend(t)
+		if err := b.Save(ctx, keys.Main, sample, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		ok, err := b.Has(ctx, keys.Main)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatal("Has after Save must return true")
+		}
+	})
+
+	t.Run("HasAfterDrop", func(t *testing.T) {
+		b := newBackend(t)
+		_ = b.Save(ctx, keys.Main, sample, time.Minute)
+		_ = b.Drop(ctx, keys.Main)
+		ok, err := b.Has(ctx, keys.Main)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			t.Fatal("Has after Drop must return false")
+		}
+	})
+
+	t.Run("HasExpired", func(t *testing.T) {
+		b, advance := newBackendWithAdvance(t)
+		if err := b.Save(ctx, keys.Main, sample, 20*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+		advance(60 * time.Millisecond)
+		ok, err := b.Has(ctx, keys.Main)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			t.Fatal("Has on expired key must return false")
+		}
+	})
+
 	t.Run("Overwrite", func(t *testing.T) {
 		b := newBackend(t)
 		_ = b.Save(ctx, keys.Main, sample, time.Minute)

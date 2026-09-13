@@ -15,6 +15,7 @@ type Backend[K comparable, V any] interface {
 	Load(ctx context.Context, key K) (V, error) // ErrNotFound on miss
 	Save(ctx context.Context, key K, v V, ttl time.Duration) error
 	Drop(ctx context.Context, key K) error
+	Has(ctx context.Context, key K) (bool, error)
 	Close() error
 }
 
@@ -65,6 +66,12 @@ func (c *Cache[K, V]) Put(ctx context.Context, key K, v V, ttl time.Duration) er
 
 func (c *Cache[K, V]) Delete(ctx context.Context, key K) error {
 	return c.backend.Drop(ctx, key)
+}
+
+// Has reports whether key is present and unexpired. It does not clone the
+// value and never triggers an upstream fetch.
+func (c *Cache[K, V]) Has(ctx context.Context, key K) (bool, error) {
+	return c.backend.Has(ctx, key)
 }
 
 func (c *Cache[K, V]) Close() error { return c.backend.Close() }

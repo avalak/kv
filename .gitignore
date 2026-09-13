@@ -1,4 +1,6 @@
 # .gitignore
+
+bin/
 *.out
 cover.out
 go.work

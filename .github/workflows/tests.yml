@@ -1,8 +1,10 @@
+# .github/workflows/tests.yml
+
 name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [ main, dev ]
     tags: ['v*']
     paths-ignore:
       - '**.md'
@@ -14,7 +16,6 @@ on:
       - '.gitignore'
       - 'LICENSE'
 
-# Read-only token; the workflow does not push anything back.
 permissions:
   contents: read
 

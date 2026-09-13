@@ -207,3 +207,71 @@ func fnvString(s string) uint64 {
 	_, _ = h.Write([]byte(s))
 	return h.Sum64()
 }
+
+func TestHasDoesNotTouchLRU(t *testing.T) {
+	// Two shards, one item capacity: verify Has on an old key does not
+	// keep it alive past a fresh Save.
+	b := memory.New[string, string](memory.Config[string]{
+		Shards:   1,
+		MaxItems: 2,
+	})
+	ctx := context.Background()
+	_ = b.Save(ctx, "a", "1", time.Minute)
+	_ = b.Save(ctx, "b", "2", time.Minute)
+
+	// Peek at "a" many times; then insert "c" to force eviction.
+	for i := 0; i < 10; i++ {
+		_, _ = b.Has(ctx, "a")
+	}
+	_ = b.Save(ctx, "c", "3", time.Minute)
+
+	// LRU order should be b, c — "a" was oldest and Has did not refresh it.
+	if ok, _ := b.Has(ctx, "a"); ok {
+		t.Fatal("Has must not refresh recency: a survived eviction")
+	}
+}
+
+func TestMaxBytesSmallerThanShards(t *testing.T) {
+	// MaxBytes=16 with 32 shards would give limit=0 under integer
+	// division and silently disable eviction. The per-shard budget
+	// rounds up to 1, so eviction still runs.
+	b := memory.New[string, string](memory.Config[string]{
+		Shards:   32,
+		MaxItems: 1000,
+		MaxBytes: 16,
+		SizeOf:   func(s string) int { return len(s) },
+	})
+	ctx := context.Background()
+
+	payload := "0123456789" // 10 bytes each
+	for i := 0; i < 100; i++ {
+		key := fmt.Sprintf("k%02d", i)
+		_ = b.Save(ctx, key, payload, time.Minute)
+	}
+
+	// 100 keys × 10 bytes across 32 shards ≈ 31 bytes per shard, well
+	// above the 1-byte per-shard budget. Most keys must be evicted.
+	remaining := 0
+	for i := 0; i < 100; i++ {
+		if _, err := b.Load(ctx, fmt.Sprintf("k%02d", i)); err == nil {
+			remaining++
+		}
+	}
+	if remaining > 20 {
+		t.Fatalf("byte budget not enforced: %d keys remain", remaining)
+	}
+}
+
+func TestMaxBytesEvictsImmediately(t *testing.T) {
+	b := memory.New[string, string](memory.Config[string]{
+		Shards:   1,
+		MaxItems: 10,
+		MaxBytes: 8,
+		SizeOf:   func(s string) int { return len(s) },
+	})
+	ctx := context.Background()
+	_ = b.Save(ctx, "k", "0123456789", time.Minute)
+	if _, err := b.Load(ctx, "k"); !errors.Is(err, kv.ErrNotFound) {
+		t.Fatalf("oversized value should be evicted immediately, got %v", err)
+	}
+}
