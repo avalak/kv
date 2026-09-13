@@ -10,11 +10,15 @@ import (
 
 	"github.com/avalak/kv"
 	"github.com/avalak/kv/hash"
+	"github.com/avalak/kv/internal/utils"
 )
 
-// Config configures the memory backend. Shards is rounded up to the next
-// power of two; zero selects 32. MaxItems and MaxBytes are divided evenly
-// across shards.
+// Config configures the memory backend.
+//
+// Shards is rounded up to the next power of two. Zero selects a default
+// of utils.Parallelism() — the smallest power of two >= runtime.NumCPU().
+//
+// MaxItems and MaxBytes are divided evenly across shards.
 type Config[V any] struct {
 	Shards   int
 	MaxItems int
@@ -74,9 +78,9 @@ func New[K comparable, V any](cfg Config[V], opts ...Option[K]) *Backend[K, V] {
 
 	n := cfg.Shards
 	if n <= 0 {
-		n = 32
+		n = utils.Parallelism()
 	} else {
-		n = nextPow2(n)
+		n = utils.NextPow2(n)
 	}
 
 	maxItems := cfg.MaxItems / n
@@ -213,15 +217,4 @@ func (b *Backend[K, V]) size(v V) int64 {
 
 func (b *Backend[K, V]) shard(key K) *shard[K, V] {
 	return b.shards[b.hash(key)&b.mask]
-}
-
-func nextPow2(n int) int {
-	if n <= 1 {
-		return 1
-	}
-	p := 1
-	for p < n {
-		p <<= 1
-	}
-	return p
 }
