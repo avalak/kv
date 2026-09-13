@@ -93,12 +93,25 @@ func New[K comparable, V any](cfg Config[V], opts ...Option[K]) *Backend[K, V] {
 	return b
 }
 
-func (b *Backend[K, V]) Load(_ context.Context, key K) (V, error) {
+func (b *Backend[K, V]) Load(ctx context.Context, key K) (V, error) {
+	if err := ctx.Err(); err != nil {
+		var zero V
+		return zero, err
+	}
 	s := b.shard(key)
-	s.mu.Lock()
-	it, ok := s.lru.Get(key)
-	s.mu.Unlock()
-	if !ok || time.Now().After(it.expiresAt) {
+	it, ok := s.lru.Get(key) // internally synchronised
+	if !ok {
+		var zero V
+		return zero, kv.ErrNotFound
+	}
+	// Lazy purge; re-check under lock against concurrent Save.
+	if time.Now().After(it.expiresAt) {
+		s.mu.Lock()
+		if cur, ok := s.lru.Peek(key); ok && time.Now().After(cur.expiresAt) {
+			s.lru.Remove(key)
+			s.bytes -= b.size(cur.v)
+		}
+		s.mu.Unlock()
 		var zero V
 		return zero, kv.ErrNotFound
 	}
