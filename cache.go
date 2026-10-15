@@ -7,7 +7,8 @@ import (
 )
 
 // Backend is the storage abstraction. Implementations must be safe for
-// concurrent use. TTL <= 0 means "do not store" and must be honoured.
+// concurrent use. ttl <= 0 means "do not store", except NoExpiry, which
+// stores without an expiry. Both must be honoured.
 //
 // K must be comparable. Backends that cannot store Go values directly
 // (redis, file) serialise K to a string via a caller-supplied encoder.
@@ -67,7 +68,7 @@ func (c *Cache[K, V]) Get(ctx context.Context, key K) (V, bool, error) {
 }
 
 func (c *Cache[K, V]) Put(ctx context.Context, key K, v V, ttl time.Duration) error {
-	if ttl <= 0 {
+	if ttl <= 0 && ttl != NoExpiry {
 		return nil
 	}
 	if c.clone != nil {

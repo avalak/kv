@@ -117,6 +117,16 @@ func Contract[K comparable, V any](
 		}
 	})
 
+	t.Run("NoExpiryStores", func(t *testing.T) {
+		b := newBackend(t)
+		if err := b.Save(ctx, keys.Main, sample, kv.NoExpiry); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.Load(ctx, keys.Main); err != nil {
+			t.Fatalf("NoExpiry entry must load: %v", err)
+		}
+	})
+
 	t.Run("Drop", func(t *testing.T) {
 		b := newBackend(t)
 		_ = b.Save(ctx, keys.Main, sample, time.Minute)

@@ -126,9 +126,9 @@ func (b *Backend[K, V]) Load(ctx context.Context, key K) (V, error) {
 		return zero, kv.ErrNotFound
 	}
 	// Lazy purge; re-check under lock against concurrent Save.
-	if time.Now().After(it.expiresAt) {
+	if !it.expiresAt.IsZero() && time.Now().After(it.expiresAt) {
 		s.mu.Lock()
-		if cur, ok := s.lru.Peek(key); ok && time.Now().After(cur.expiresAt) {
+		if cur, ok := s.lru.Peek(key); ok && !cur.expiresAt.IsZero() && time.Now().After(cur.expiresAt) {
 			s.lru.Remove(key)
 			s.bytes -= b.size(cur.v)
 		}
@@ -143,7 +143,7 @@ func (b *Backend[K, V]) Save(ctx context.Context, key K, v V, ttl time.Duration)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if ttl <= 0 {
+	if ttl <= 0 && ttl != kv.NoExpiry {
 		return nil
 	}
 	s := b.shard(key)
@@ -155,7 +155,11 @@ func (b *Backend[K, V]) Save(ctx context.Context, key K, v V, ttl time.Duration)
 	if old, ok := s.lru.Peek(key); ok {
 		s.bytes -= b.size(old.v)
 	}
-	s.lru.Add(key, item[V]{v: v, expiresAt: time.Now().Add(ttl)})
+	it := item[V]{v: v}
+	if ttl != kv.NoExpiry {
+		it.expiresAt = time.Now().Add(ttl)
+	}
+	s.lru.Add(key, it)
 	s.bytes += size
 
 	for b.perShardMaxBytes > 0 && s.bytes > b.perShardMaxBytes {
@@ -195,9 +199,9 @@ func (b *Backend[K, V]) Has(ctx context.Context, key K) (bool, error) {
 	}
 	// Lazy purge, same pattern as Load: re-check under lock in case Save
 	// replaced the entry concurrently.
-	if time.Now().After(it.expiresAt) {
+	if !it.expiresAt.IsZero() && time.Now().After(it.expiresAt) {
 		s.mu.Lock()
-		if cur, ok := s.lru.Peek(key); ok && time.Now().After(cur.expiresAt) {
+		if cur, ok := s.lru.Peek(key); ok && !cur.expiresAt.IsZero() && time.Now().After(cur.expiresAt) {
 			s.lru.Remove(key)
 			s.bytes -= b.size(cur.v)
 		}
