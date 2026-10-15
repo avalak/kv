@@ -3,6 +3,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -207,6 +208,35 @@ func (b *Backend[K, V]) Has(ctx context.Context, key K) (bool, error) {
 }
 
 func (b *Backend[K, V]) Close() error { return nil }
+
+// DropPrefix removes every entry whose key begins with prefix. Matching
+// is byte-wise on the string value: K must be string exactly. Named
+// string types and other key types return ErrPrefixUnsupported; if a
+// backend needs them, the matcher belongs on that backend.
+func (b *Backend[K, V]) DropPrefix(ctx context.Context, prefix K) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p, ok := any(prefix).(string)
+	if !ok {
+		return kv.ErrPrefixUnsupported
+	}
+	for _, s := range b.shards {
+		s.mu.Lock()
+		for _, k := range s.lru.Keys() {
+			ks, _ := any(k).(string)
+			if !strings.HasPrefix(ks, p) {
+				continue
+			}
+			if old, ok := s.lru.Peek(k); ok {
+				s.bytes -= b.size(old.v)
+			}
+			s.lru.Remove(k)
+		}
+		s.mu.Unlock()
+	}
+	return nil
+}
 
 func (b *Backend[K, V]) size(v V) int64 {
 	if b.cfg.SizeOf == nil {

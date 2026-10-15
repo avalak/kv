@@ -18,6 +18,10 @@ func (*Backend[K, V]) Load(context.Context, K) (V, error) {
 	return zero, kv.ErrNotFound
 }
 
+// DropPrefix is a no-op: the dummy backend stores nothing. It exists so
+// the backend satisfies kv.PrefixBackend.
+func (*Backend[K, V]) DropPrefix(context.Context, K) error { return nil }
+
 func (*Backend[K, V]) Save(context.Context, K, V, time.Duration) error { return nil }
 func (*Backend[K, V]) Drop(context.Context, K) error                   { return nil }
 func (*Backend[K, V]) Has(context.Context, K) (bool, error)            { return false, nil }

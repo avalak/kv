@@ -19,6 +19,18 @@ type Backend[K comparable, V any] interface {
 	Close() error
 }
 
+// PrefixBackend is an optional extension of Backend. A backend that
+// implements it removes every entry whose key begins with a prefix;
+// Cache.DeletePrefix dispatches to it.
+type PrefixBackend[K comparable, V any] interface {
+	Backend[K, V]
+
+	// DropPrefix removes every entry whose key begins with prefix.
+	// A backend whose key type cannot be matched by prefix returns
+	// ErrPrefixUnsupported.
+	DropPrefix(ctx context.Context, prefix K) error
+}
+
 // Cache wraps a Backend with defensive copying. The clone function is
 // applied on both Save and Load so callers can never mutate the stored
 // value through a returned reference.
@@ -75,3 +87,14 @@ func (c *Cache[K, V]) Has(ctx context.Context, key K) (bool, error) {
 }
 
 func (c *Cache[K, V]) Close() error { return c.backend.Close() }
+
+// DeletePrefix removes every entry whose key begins with prefix. It
+// returns ErrPrefixUnsupported when the backend does not implement
+// PrefixBackend.
+func (c *Cache[K, V]) DeletePrefix(ctx context.Context, prefix K) error {
+	pb, ok := c.backend.(PrefixBackend[K, V])
+	if !ok {
+		return ErrPrefixUnsupported
+	}
+	return pb.DropPrefix(ctx, prefix)
+}

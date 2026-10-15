@@ -9,3 +9,7 @@ import "errors"
 
 // ErrNotFound is returned by Backend.Load on a miss or expired entry.
 var ErrNotFound = errors.New("kv: not found")
+
+// ErrPrefixUnsupported is returned by Cache.DeletePrefix and by a
+// backend's DropPrefix when the backend cannot match keys by prefix.
+var ErrPrefixUnsupported = errors.New("kv: prefix not supported")
